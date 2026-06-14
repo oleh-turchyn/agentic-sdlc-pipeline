@@ -61,5 +61,6 @@ yarn-error.log
 
 # Application specific
 output/
+pipeline-report.json
 *.tmp
 *.bak
