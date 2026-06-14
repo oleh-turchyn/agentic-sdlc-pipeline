@@ -1,0 +1,139 @@
+openapi: 3.0.3
+info:
+  title: Order Management API
+  version: 1.0.0
+  description: API for managing customer orders
+
+paths:
+  /orders:
+    post:
+      summary: Create a new order
+      operationId: createOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+      responses:
+        '201':
+          description: Order created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          description: Invalid request
+        '422':
+          description: Unprocessable entity (e.g. out of stock)
+
+    get:
+      summary: Get all orders for a user
+      operationId: getAllOrders
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of orders
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderListResponse'
+
+  /orders/{orderId}:
+    get:
+      summary: Get order by ID
+      operationId: getOrderById
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Order details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '404':
+          description: Order not found
+
+    delete:
+      summary: Cancel an order
+      operationId: deleteOrder
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Order cancelled
+        '404':
+          description: Order not found
+        '409':
+          description: Order cannot be cancelled (already shipped)
+
+components:
+  schemas:
+    CreateOrderRequest:
+      type: object
+      required:
+        - userId
+        - productIds
+        - paymentMethod
+      properties:
+        userId:
+          type: string
+        productIds:
+          type: array
+          items:
+            type: string
+        paymentMethod:
+          type: string
+          enum: [CREDIT_CARD, PAYPAL, BANK_TRANSFER]
+
+    OrderResponse:
+      type: object
+      properties:
+        orderId:
+          type: string
+        total:
+          type: number
+        status:
+          type: string
+          enum: [CREATED, PROCESSING, SHIPPED, DELIVERED, CANCELLED]
+        createdAt:
+          type: string
+          format: date-time
+
+    OrderListResponse:
+      type: object
+      properties:
+        orders:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderResponse'
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
