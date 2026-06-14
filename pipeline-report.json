@@ -1,310 +1,325 @@
 {
   "file" : "sample-input/OrderController.java",
-  "totalIssues" : 58,
-  "criticalCount" : 30,
-  "warningCount" : 21,
-  "infoCount" : 7,
+  "totalIssues" : 61,
+  "criticalCount" : 40,
+  "warningCount" : 16,
+  "infoCount" : 5,
   "agentResults" : [ {
     "agentName" : "Code Review Agent",
-    "summary" : "Multiple SOLID principle violations, missing input validation, unsafe type casting, missing error handling, business logic in wrong layer, and security concerns detected. This code requires significant refactoring.",
+    "summary" : "The OrderController contains 12 significant issues including SOLID violations, missing input validation, unsafe casting, missing transaction management, authorization flaws, and architectural concerns. Most critical issues are the missing null checks, unsafe casting without error handling, lack of authorization checks, and violation of separation of concerns.",
     "issues" : [ {
       "severity" : "CRITICAL",
-      "category" : "Dependency Injection / SOLID DIP",
-      "description" : "Services are directly instantiated instead of injected. This violates Dependency Inversion Principle and makes unit testing impossible.",
-      "suggestion" : "Use constructor or setter injection with proper DI framework (Spring, Guice). Accept OrderService, UserService, EmailService, and InventoryService as constructor parameters."
-    }, {
-      "severity" : "CRITICAL",
-      "category" : "Authorization / Security",
-      "description" : "getAllOrders() method has no authorization check. Any authenticated user can retrieve any other user's orders by providing their userId.",
-      "suggestion" : "Add authorization check to verify the requesting user matches the userId parameter or has admin privileges. Use Spring Security or similar framework."
+      "category" : "Security - Authorization",
+      "description" : "getAllOrders() method has no authorization check. Any authenticated user can retrieve orders for any userId without verification that the requester owns those orders.",
+      "suggestion" : "Add authorization check: verify that the requesting user matches the userId parameter or has admin privileges before returning order data."
     }, {
       "severity" : "CRITICAL",
       "category" : "Input Validation",
-      "description" : "No null checks on userId, productIds, or paymentMethod. NullPointerException will occur if any parameter is null.",
-      "suggestion" : "Add null checks: if (userId == null || productIds == null || paymentMethod == null) throw new IllegalArgumentException(...). Use Objects.requireNonNull() or @Nonnull annotations."
+      "description" : "createOrder() method accepts productIds list without null checks. If null is passed, NullPointerException will occur during iteration.",
+      "suggestion" : "Add null checks: if (userId == null || productIds == null || productIds.isEmpty()) throw new IllegalArgumentException(\"Invalid input\");"
     }, {
       "severity" : "CRITICAL",
       "category" : "Unsafe Type Casting",
-      "description" : "Unsafe cast: (double) product.get(\"price\") can throw ClassCastException if price is null or not a numeric type.",
-      "suggestion" : "Use type-safe DTO classes instead of Map. Add null checks and type validation before casting. Consider using BigDecimal for prices instead of double."
-    }, {
-      "severity" : "CRITICAL",
-      "category" : "God Method / SRP Violation",
-      "description" : "createOrder() method does too many things: validation, product retrieval, price calculation, discount logic, order creation, user update, and email notification.",
-      "suggestion" : "Split into separate methods/classes: OrderValidator, PricingService, OrderCreationService, OrderNotificationService. Each should have single responsibility."
-    }, {
-      "severity" : "CRITICAL",
-      "category" : "Missing Error Handling",
-      "description" : "No try-catch blocks. If inventoryService.getProduct() returns null or fails, the code crashes. No handling for service failures.",
-      "suggestion" : "Add comprehensive exception handling. Catch service exceptions, validate responses, and throw meaningful domain exceptions. Use proper logging."
+      "description" : "Unsafe casting of product.get(\"price\") to double without null check or type validation. Returns null or wrong type will cause ClassCastException.",
+      "suggestion" : "Validate and safely cast: Object priceObj = product.get(\"price\"); if (priceObj == null || !(priceObj instanceof Number)) throw new IllegalArgumentException(); double price = ((Number) priceObj).doubleValue();"
     }, {
       "severity" : "CRITICAL",
       "category" : "Transaction Management",
-      "description" : "createOrder, updateOrderHistory, and sendOrderConfirmation are called sequentially without transaction management. If updateOrderHistory fails, order is created but history not updated.",
-      "suggestion" : "Wrap all operations in a single database transaction using @Transactional annotation or explicit transaction management. Consider saga pattern for distributed transactions."
+      "description" : "No transaction management across multiple service calls (createOrder, updateOrderHistory, sendOrderConfirmation). If one fails, data becomes inconsistent. Email sent but order creation fails leaves system in inconsistent state.",
+      "suggestion" : "Implement database transactions using @Transactional or explicit transaction management wrapping all three operations. Move email sending outside transaction or implement compensating transactions."
+    }, {
+      "severity" : "CRITICAL",
+      "category" : "SOLID - Dependency Inversion Principle",
+      "description" : "Direct instantiation of services (new OrderService(), new UserService(), etc.) instead of dependency injection. Makes code untestable and violates DIP.",
+      "suggestion" : "Use constructor injection: inject OrderService, UserService, EmailService, and InventoryService as constructor parameters with interface types."
+    }, {
+      "severity" : "WARNING",
+      "category" : "SOLID - Single Responsibility Principle",
+      "description" : "createOrder() method violates SRP: handles input validation, product fetching, price calculation, discount logic, order creation, user history update, email sending, and response formatting. God method doing 8+ responsibilities.",
+      "suggestion" : "Split into separate classes: OrderCreationUseCase (orchestrates), PricingService (calculates total and discounts), OrderNotificationService (sends emails). Implement decorator/strategy pattern for discounts."
+    }, {
+      "severity" : "WARNING",
+      "category" : "Missing Error Handling",
+      "description" : "No try-catch or error handling for service calls. If inventoryService.getProduct() fails, getAllOrders() fails silently, or if emailService.sendOrderConfirmation() fails, the entire transaction fails without logging.",
+      "suggestion" : "Add proper exception handling with logging: wrap service calls in try-catch, log errors, and return appropriate error responses or throw custom exceptions."
+    }, {
+      "severity" : "WARNING",
+      "category" : "Raw Types / Type Safety",
+      "description" : "Using raw Map<String, Object> instead of typed DTOs for products and responses. Loses type safety and makes code harder to maintain.",
+      "suggestion" : "Create typed DTOs: class ProductDTO { String id; double price; ... }, class OrderResponseDTO { String orderId; double total; String status; }, and use these instead of raw Maps."
     }, {
       "severity" : "WARNING",
       "category" : "Hardcoded Business Logic",
-      "description" : "Discount logic (10% off for orders > 100) is hardcoded in controller. Makes it unmaintainable and prevents testing pricing rules independently.",
-      "suggestion" : "Extract to PricingService or DiscountCalculator class. Use configuration files or database for discount rules. Allow dependency injection of pricing strategy."
-    }, {
-      "severity" : "WARNING",
-      "category" : "Side Effects in Controller",
-      "description" : "emailService.sendOrderConfirmation() is called in controller. Email sending is a side effect that should be asynchronous and in service layer.",
-      "suggestion" : "Move email notification to OrderService or create separate OrderNotificationService. Use event-driven approach (publish OrderCreatedEvent) and handle asynchronously."
-    }, {
-      "severity" : "WARNING",
-      "category" : "Raw Types / Missing DTO",
-      "description" : "Method returns raw Map<String, Object> instead of typed DTO. No compile-time safety, poor API contract, hard to document.",
-      "suggestion" : "Create OrderResponse or OrderCreationDTO class with typed fields. Use proper serialization annotations (@JsonProperty, @JsonIgnore). Document API with OpenAPI/Swagger."
+      "description" : "Discount logic (10% for orders > 100) is hardcoded in controller layer. Should be in business logic layer and configurable.",
+      "suggestion" : "Create PricingService or DiscountStrategy interface with configurable discount rules. Move discount calculation to service layer."
     }, {
       "severity" : "WARNING",
       "category" : "Missing Input Validation",
-      "description" : "productIds list can be empty or contain invalid IDs. No validation that products exist or are available.",
-      "suggestion" : "Validate that productIds is not empty. Check that all products exist and have valid prices. Add inventory availability checks."
+      "description" : "No validation of paymentMethod parameter. No check if userId exists or if products are available in inventory.",
+      "suggestion" : "Add validation: check if userId exists, validate paymentMethod against enum, verify inventory availability before proceeding."
     }, {
       "severity" : "WARNING",
-      "category" : "Numeric Precision",
-      "description" : "Using double for monetary values (prices, totals) can cause rounding errors. Discount calculation (total * 0.9) is not precise.",
-      "suggestion" : "Use BigDecimal for all monetary calculations. Discount should be: total.multiply(new BigDecimal(\"0.9\"))."
+      "category" : "Separation of Concerns",
+      "description" : "Controller directly calls email service (emailService.sendOrderConfirmation()). Email sending is a side effect that should be handled asynchronously via event publishing or message queue.",
+      "suggestion" : "Publish domain event (OrderCreatedEvent) from OrderService; let event handler send confirmation email asynchronously. Decouple email from order creation."
     }, {
-      "severity" : "WARNING",
+      "severity" : "INFO",
       "category" : "Missing Pagination",
-      "description" : "getAllOrders() retrieves all orders without pagination. Can cause memory issues and slow responses for users with thousands of orders.",
-      "suggestion" : "Add pagination parameters (page, size). Return PageResponse with content, total count, and pagination metadata."
-    }, {
-      "severity" : "INFO",
-      "category" : "Missing Implementation",
-      "description" : "deleteOrder and updateOrder operations mentioned in OpenAPI spec but not implemented in controller.",
-      "suggestion" : "Implement remaining CRUD operations: updateOrder(String orderId, OrderUpdateRequest) and deleteOrder(String orderId). Ensure consistent error handling."
-    }, {
-      "severity" : "INFO",
-      "category" : "Missing Logging",
-      "description" : "No logging for debugging, monitoring, or audit trail. Cannot track order creation flow or troubleshoot issues.",
-      "suggestion" : "Add SLF4J logger. Log at key points: order creation start, product validation, pricing calculation, order persistence, notification sending."
-    }, {
-      "severity" : "INFO",
-      "category" : "Resource Leaks",
-      "description" : "No resource management. If services use database connections or external APIs, they may not be properly closed.",
-      "suggestion" : "Ensure all services properly implement AutoCloseable if they hold resources. Use try-with-resources or dependency injection container for lifecycle management."
+      "description" : "getAllOrders() retrieves all orders without pagination. Could return millions of records and cause memory/performance issues.",
+      "suggestion" : "Add pagination parameters: getAllOrders(String userId, int page, int pageSize) and implement limit/offset or cursor-based pagination."
     } ]
   }, {
     "agentName" : "OpenAPI Enforcer Agent",
-    "summary" : "Critical mismatches found between OpenAPI specification and Java implementation. Missing 2 endpoints, no pagination support, incorrect return types, missing validation, and missing HTTP status code handling.",
+    "summary" : "Critical mismatches found between OpenAPI specification and Java implementation. Multiple endpoints missing, wrong return types, missing pagination, no error handling for specified status codes, and lack of input validation.",
     "issues" : [ {
       "severity" : "CRITICAL",
       "category" : "Missing Endpoint Implementation",
-      "description" : "The DELETE /orders/{orderId} endpoint (deleteOrder operation) is defined in OpenAPI but completely missing from the Java controller",
-      "suggestion" : "Implement deleteOrder(String orderId) method that handles 204 (success), 404 (not found), and 409 (conflict - already shipped) response codes"
+      "description" : "POST /orders endpoint (createOrder) is missing from controller. Specification defines this endpoint but implementation has no @PostMapping or equivalent.",
+      "suggestion" : "Add createOrder method with @PostMapping(\"/orders\") annotation that accepts CreateOrderRequest DTO and returns ResponseEntity<OrderResponse> with proper HTTP status codes (201, 400, 422)."
     }, {
       "severity" : "CRITICAL",
       "category" : "Missing Endpoint Implementation",
-      "description" : "The GET /orders/{orderId} endpoint (getOrderById operation) is defined in OpenAPI but missing from the Java controller",
-      "suggestion" : "Implement getOrderById(String orderId) method that returns OrderResponse DTO and handles 404 response code"
+      "description" : "GET /orders/{orderId} endpoint (getOrderById) is completely missing from controller. Specified in OpenAPI but not implemented.",
+      "suggestion" : "Add getOrderById method with @GetMapping(\"/orders/{orderId}\") that returns OrderResponse and handles 404 Not Found with proper exception handling."
+    }, {
+      "severity" : "CRITICAL",
+      "category" : "Missing Endpoint Implementation",
+      "description" : "DELETE /orders/{orderId} endpoint (deleteOrder) is completely missing from controller. Specified in OpenAPI but not implemented.",
+      "suggestion" : "Add deleteOrder method with @DeleteMapping(\"/orders/{orderId}\") that returns 204 No Content on success and handles 404 and 409 Conflict responses."
     }, {
       "severity" : "CRITICAL",
       "category" : "Wrong Return Type",
-      "description" : "createOrder returns raw Map<String, Object> instead of typed OrderResponse DTO as defined in OpenAPI spec",
-      "suggestion" : "Create OrderResponse DTO class with fields: orderId, total, status, createdAt. Return OrderResponse instead of Map. Also return HTTP 201 status code"
+      "description" : "createOrder returns Map<String, Object> instead of typed OrderResponse DTO as specified in OpenAPI schema.",
+      "suggestion" : "Create OrderResponse DTO class matching the schema and return ResponseEntity<OrderResponse> with proper status code 201."
     }, {
       "severity" : "CRITICAL",
       "category" : "Wrong Return Type",
-      "description" : "getAllOrders returns raw List<Map> instead of OrderListResponse DTO defined in OpenAPI spec. OrderListResponse should contain orders array, totalElements, and totalPages",
-      "suggestion" : "Create OrderListResponse DTO class with fields: orders (List<OrderResponse>), totalElements (int), totalPages (int). Return OrderListResponse instead of List<Map>"
+      "description" : "getAllOrders returns List<Map<String, Object>> instead of OrderListResponse DTO as specified in OpenAPI. Missing pagination wrapper object.",
+      "suggestion" : "Create OrderListResponse DTO with orders list, totalElements, and totalPages fields. Return ResponseEntity<OrderListResponse>."
     }, {
       "severity" : "CRITICAL",
       "category" : "Missing Pagination Support",
-      "description" : "getAllOrders method does not accept page and size parameters defined in OpenAPI spec (page default 0, size default 20)",
-      "suggestion" : "Add page and size parameters to getAllOrders(String userId, int page, int size) method signature with default values. Implement pagination logic in orderService"
+      "description" : "getAllOrders method does not accept page and size query parameters defined in OpenAPI specification (default page=0, size=20).",
+      "suggestion" : "Add @RequestParam(value = \"page\", defaultValue = \"0\") Integer page and @RequestParam(value = \"size\", defaultValue = \"20\") Integer size parameters to getAllOrders method."
     }, {
       "severity" : "CRITICAL",
       "category" : "Missing Request Validation",
-      "description" : "createOrder does not validate required fields (userId, productIds, paymentMethod) or request body structure defined in CreateOrderRequest schema",
-      "suggestion" : "Add validation annotations (@NotNull, @NotEmpty, @Valid) to createOrder parameters. Validate paymentMethod is one of CREDIT_CARD, PAYPAL, BANK_TRANSFER. Validate productIds is not empty"
+      "description" : "createOrder method has no validation for required fields (userId, productIds, paymentMethod) specified in CreateOrderRequest schema.",
+      "suggestion" : "Add @Valid annotation to CreateOrderRequest parameter and use @NotNull, @NotEmpty annotations on required fields. Implement proper exception handling for validation errors returning 400 Bad Request."
     }, {
       "severity" : "CRITICAL",
-      "category" : "Missing HTTP Status Code Handling",
-      "description" : "createOrder does not handle 400 (invalid request) and 422 (unprocessable entity/out of stock) responses defined in OpenAPI spec",
-      "suggestion" : "Return HTTP 400 for validation failures. Check inventory availability and return HTTP 422 if products are out of stock. Use appropriate HTTP response entities"
+      "category" : "Missing Error Response Handling",
+      "description" : "createOrder does not handle 400 Bad Request response defined in OpenAPI for invalid requests.",
+      "suggestion" : "Add try-catch blocks or @ExceptionHandler to catch validation errors and return ResponseEntity with 400 status and error details."
+    }, {
+      "severity" : "CRITICAL",
+      "category" : "Missing Error Response Handling",
+      "description" : "createOrder does not handle 422 Unprocessable Entity response (e.g., out of stock) defined in OpenAPI.",
+      "suggestion" : "Check inventory availability before creating order and throw appropriate exception that maps to 422 response with error details about out-of-stock items."
+    }, {
+      "severity" : "CRITICAL",
+      "category" : "Missing Error Response Handling",
+      "description" : "getOrderById does not handle 404 Not Found response defined in OpenAPI when order does not exist.",
+      "suggestion" : "Add exception handling to catch OrderNotFoundException and return ResponseEntity with 404 status code."
+    }, {
+      "severity" : "CRITICAL",
+      "category" : "Missing Error Response Handling",
+      "description" : "deleteOrder does not handle 404 Not Found response defined in OpenAPI when order does not exist.",
+      "suggestion" : "Add exception handling to return 404 when order not found before attempting deletion."
+    }, {
+      "severity" : "CRITICAL",
+      "category" : "Missing Error Response Handling",
+      "description" : "deleteOrder does not handle 409 Conflict response defined in OpenAPI when order cannot be cancelled (already shipped).",
+      "suggestion" : "Check order status before deletion. If status is SHIPPED or DELIVERED, throw OrderCannotBeCancelledException that maps to 409 Conflict response."
     }, {
       "severity" : "WARNING",
-      "category" : "Missing HTTP Status Code Handling",
-      "description" : "getAllOrders does not handle potential error cases. Should validate required userId parameter and handle 400 for invalid requests",
-      "suggestion" : "Add validation for required userId parameter. Return HTTP 400 if userId is missing or invalid"
+      "category" : "Missing Path Parameter",
+      "description" : "getOrderById method is missing but should accept orderId path parameter defined in OpenAPI specification.",
+      "suggestion" : "Implement getOrderById with @PathVariable(\"orderId\") String orderId parameter."
     }, {
       "severity" : "WARNING",
-      "category" : "Missing Path Parameter Validation",
-      "description" : "getOrderById and deleteOrder methods are missing but should validate orderId path parameter is present and properly formatted",
-      "suggestion" : "Add @PathVariable annotation for orderId parameter. Validate orderId is not null/empty before processing"
+      "category" : "Missing Path Parameter",
+      "description" : "deleteOrder method is missing but should accept orderId path parameter defined in OpenAPI specification.",
+      "suggestion" : "Implement deleteOrder with @PathVariable(\"orderId\") String orderId parameter."
     }, {
       "severity" : "WARNING",
-      "category" : "Missing Request Validation",
-      "description" : "getAllOrders does not validate required userId query parameter (marked as required in OpenAPI spec)",
-      "suggestion" : "Add @RequestParam(required = true) annotation for userId parameter"
+      "category" : "Missing Required Query Parameter",
+      "description" : "getAllOrders method does not have @RequestParam for required userId query parameter defined in OpenAPI.",
+      "suggestion" : "Add @RequestParam(value = \"userId\", required = true) String userId parameter to getAllOrders method."
     }, {
       "severity" : "WARNING",
-      "category" : "Architecture Issue",
-      "description" : "Controller uses direct instantiation of dependencies (OrderService, UserService, etc.) instead of dependency injection via @Autowired or constructor injection",
-      "suggestion" : "Inject dependencies via constructor or @Autowired field injection to improve testability and follow Spring best practices"
-    }, {
-      "severity" : "WARNING",
-      "category" : "Architecture Issue",
-      "description" : "Business logic (discount calculation, inventory checks) is mixed in controller instead of being in service layer",
-      "suggestion" : "Move discount logic, inventory validation, and order processing to OrderService. Controller should only handle HTTP concerns"
-    }, {
-      "severity" : "WARNING",
-      "category" : "Missing Input Validation",
-      "description" : "No null checks or defensive programming for productIds iteration or product retrieval from inventory service",
-      "suggestion" : "Add null checks for productIds, validate productIds is not empty, handle null products returned from inventoryService"
+      "category" : "Missing Request DTO",
+      "description" : "createOrder method accepts individual parameters instead of CreateOrderRequest DTO object defined in OpenAPI schema.",
+      "suggestion" : "Create CreateOrderRequest DTO class with userId, productIds, and paymentMethod fields. Accept this object in createOrder method."
     }, {
       "severity" : "INFO",
-      "category" : "Code Quality",
-      "description" : "Sending email side effect (emailService.sendOrderConfirmation) should not occur in controller request/response path",
-      "suggestion" : "Move email sending to async operation or event handler after order is successfully created and persisted"
+      "category" : "Missing HTTP Status Annotations",
+      "description" : "Methods lack @ResponseStatus or proper ResponseEntity wrapping to specify HTTP status codes defined in OpenAPI.",
+      "suggestion" : "Use ResponseEntity<T> to explicitly set status codes: 201 for POST success, 204 for DELETE success, 200 for GET success, 4xx for error responses."
+    }, {
+      "severity" : "INFO",
+      "category" : "Missing API Documentation",
+      "description" : "Controller methods lack @Operation, @ApiResponse annotations to document OpenAPI contract compliance.",
+      "suggestion" : "Add SpringDoc OpenAPI annotations (@Operation, @ApiResponse) to controller methods documenting all response codes and schemas from OpenAPI spec."
     } ]
   }, {
     "agentName" : "Test Gap Analyzer Agent",
-    "summary" : "Extensive missing test coverage identified across null handling, edge cases, business logic branches, error paths, authorization, boundary conditions, and all OpenAPI-defined HTTP error codes. Additionally, controller has architectural issues (no DI, God method, mixed concerns) that require unit tests to expose.",
+    "summary" : "Critical gaps in test coverage for OrderController: missing null input validation tests, empty collection edge cases, business logic boundary tests, authorization tests, error path tests, and complete absence of tests for 5 OpenAPI endpoints (getOrderById, deleteOrder, and pagination tests for getAllOrders).",
     "issues" : [ {
       "severity" : "CRITICAL",
-      "category" : "Missing Null Input Tests",
-      "description" : "createOrder method has no null checks for userId, productIds, or paymentMethod parameters. No test covers these scenarios.",
-      "suggestion" : "@Test void shouldReturnBadRequestWhenUserIdIsNull() { assertThrows(IllegalArgumentException.class, () -> orderController.createOrder(null, List.of(\"prod1\"), \"CREDIT_CARD\")); }"
+      "category" : "Missing Null Input Validation Tests",
+      "description" : "No tests verify behavior when userId is null in createOrder",
+      "suggestion" : "@Test void shouldReturnBadRequestWhenUserIdIsNull() { /* verify 400 error */ }"
     }, {
       "severity" : "CRITICAL",
-      "category" : "Missing Null Input Tests",
-      "description" : "createOrder method accepts null productIds without validation.",
-      "suggestion" : "@Test void shouldReturnBadRequestWhenProductIdsIsNull() { assertThrows(IllegalArgumentException.class, () -> orderController.createOrder(\"user123\", null, \"CREDIT_CARD\")); }"
+      "category" : "Missing Null Input Validation Tests",
+      "description" : "No tests verify behavior when productIds is null in createOrder",
+      "suggestion" : "@Test void shouldReturnBadRequestWhenProductIdsIsNull() { /* verify 400 error */ }"
     }, {
       "severity" : "CRITICAL",
-      "category" : "Missing Null Input Tests",
-      "description" : "createOrder method accepts null paymentMethod without validation.",
-      "suggestion" : "@Test void shouldReturnBadRequestWhenPaymentMethodIsNull() { assertThrows(IllegalArgumentException.class, () -> orderController.createOrder(\"user123\", List.of(\"prod1\"), null)); }"
+      "category" : "Missing Null Input Validation Tests",
+      "description" : "No tests verify behavior when paymentMethod is null in createOrder",
+      "suggestion" : "@Test void shouldReturnBadRequestWhenPaymentMethodIsNull() { /* verify 400 error */ }"
     }, {
       "severity" : "CRITICAL",
       "category" : "Missing Empty Collection Tests",
-      "description" : "createOrder accepts empty productIds list without error, potentially creating invalid orders with zero total.",
-      "suggestion" : "@Test void shouldReturnBadRequestWhenProductIdsListIsEmpty() { assertThrows(IllegalArgumentException.class, () -> orderController.createOrder(\"user123\", new ArrayList<>(), \"CREDIT_CARD\")); }"
+      "description" : "No tests verify behavior when productIds list is empty in createOrder",
+      "suggestion" : "@Test void shouldReturnBadRequestWhenProductIdsListIsEmpty() { /* verify 400 error */ }"
+    }, {
+      "severity" : "CRITICAL",
+      "category" : "Missing Business Logic Tests",
+      "description" : "No tests verify discount calculation threshold boundary (total = 100, 99.99, 100.01)",
+      "suggestion" : "@Test void shouldApplyDiscountWhenTotalExactly100() { /* verify 10% discount applied */ }"
+    }, {
+      "severity" : "CRITICAL",
+      "category" : "Missing Business Logic Tests",
+      "description" : "No tests verify discount NOT applied when total is just below threshold",
+      "suggestion" : "@Test void shouldNotApplyDiscountWhenTotalBelow100() { /* verify no discount */ }"
+    }, {
+      "severity" : "CRITICAL",
+      "category" : "Missing Business Logic Tests",
+      "description" : "No tests verify discount IS applied when total is above threshold",
+      "suggestion" : "@Test void shouldApplyDiscountWhenTotalGreaterThan100() { /* verify 10% discount */ }"
     }, {
       "severity" : "CRITICAL",
       "category" : "Missing Error Path Tests",
-      "description" : "No test for HTTP 404 when a product is not found (inventoryService.getProduct returns null or throws exception).",
-      "suggestion" : "@Test void shouldReturnUnprocessableEntityWhenProductNotFound() { when(inventoryService.getProduct(\"invalid-prod\")).thenReturn(null); var result = orderController.createOrder(\"user123\", List.of(\"invalid-prod\"), \"CREDIT_CARD\"); assertEquals(404, result.get(\"statusCode\")); }"
+      "description" : "No tests verify 422 response when product is not found in inventory",
+      "suggestion" : "@Test void shouldReturnUnprocessableEntityWhenProductNotFound() { /* verify 422 error */ }"
     }, {
       "severity" : "CRITICAL",
-      "category" : "Missing Business Logic Branch Tests",
-      "description" : "Discount calculation (10% when total > 100) is untested. Need test for total exactly at 100, just above 100, and well above 100.",
-      "suggestion" : "@Test void shouldApplyDiscountWhenTotalExceeds100() { mockProductPrice(50.50, 50.50); var result = orderController.createOrder(\"user123\", List.of(\"prod1\", \"prod2\"), \"CREDIT_CARD\"); assertEquals(90.9, result.get(\"total\")); }"
-    }, {
-      "severity" : "CRITICAL",
-      "category" : "Missing Business Logic Branch Tests",
-      "description" : "No test for orders with total exactly at or below 100 threshold (no discount applied).",
-      "suggestion" : "@Test void shouldNotApplyDiscountWhenTotalIs100OrLess() { mockProductPrice(50.0, 50.0); var result = orderController.createOrder(\"user123\", List.of(\"prod1\", \"prod2\"), \"CREDIT_CARD\"); assertEquals(100.0, result.get(\"total\")); }"
+      "category" : "Missing Error Path Tests",
+      "description" : "No tests verify handling of product with zero price",
+      "suggestion" : "@Test void shouldHandleZeroPricedProduct() { /* verify order total calculation */ }"
     }, {
       "severity" : "CRITICAL",
       "category" : "Missing Authorization Tests",
-      "description" : "getAllOrders has no authorization check - no test verifies user cannot access other users' orders.",
-      "suggestion" : "@Test void shouldReturnForbiddenWhenUserAccessesOtherUsersOrders() { var user1Orders = orderController.getAllOrders(\"user1\"); var user2Orders = orderController.getAllOrders(\"user2\"); assertNotEquals(user1Orders, user2Orders); }"
+      "description" : "getAllOrders() lacks authorization checks - no test verifies user cannot access other user's orders",
+      "suggestion" : "@Test void shouldReturnForbiddenWhenUserAccessesAnotherUsersOrders() { /* verify authorization */ }"
     }, {
       "severity" : "CRITICAL",
-      "category" : "Missing Authorization Tests",
-      "description" : "No authorization check for getOrderById - user could access orders they don't own.",
-      "suggestion" : "@Test void shouldReturnForbiddenWhenUserAccessesOrderFromOtherUser() { // Missing endpoint implementation - test needed when added }"
+      "category" : "Missing Endpoint Implementation",
+      "description" : "getOrderById endpoint defined in OpenAPI but completely missing from controller - no tests possible",
+      "suggestion" : "@Test void shouldReturnOrderByIdWith200Status() { /* test GET /orders/{orderId} */ }"
     }, {
       "severity" : "CRITICAL",
-      "category" : "Missing HTTP 400 Error Path Tests",
-      "description" : "No test for HTTP 400 Bad Request when invalid paymentMethod is provided (must be CREDIT_CARD, PAYPAL, or BANK_TRANSFER per OpenAPI).",
-      "suggestion" : "@Test void shouldReturnBadRequestWhenPaymentMethodIsInvalid() { var result = orderController.createOrder(\"user123\", List.of(\"prod1\"), \"INVALID_METHOD\"); assertEquals(400, result.get(\"statusCode\")); }"
+      "category" : "Missing Endpoint Implementation",
+      "description" : "getOrderById should return 404 when order not found",
+      "suggestion" : "@Test void shouldReturnNotFoundWhenOrderByIdDoesNotExist() { /* verify 404 error */ }"
     }, {
       "severity" : "CRITICAL",
-      "category" : "Missing HTTP 422 Error Path Tests",
-      "description" : "No test for HTTP 422 Unprocessable Entity when product is out of stock.",
-      "suggestion" : "@Test void shouldReturn422WhenProductIsOutOfStock() { mockProductOutOfStock(\"prod1\"); var result = orderController.createOrder(\"user123\", List.of(\"prod1\"), \"CREDIT_CARD\"); assertEquals(422, result.get(\"statusCode\")); assertEquals(\"OUT_OF_STOCK\", result.get(\"error\")); }"
+      "category" : "Missing Endpoint Implementation",
+      "description" : "deleteOrder endpoint defined in OpenAPI but completely missing from controller - no tests possible",
+      "suggestion" : "@Test void shouldCancelOrderAndReturnNoContent() { /* test DELETE /orders/{orderId} with 204 */ }"
     }, {
       "severity" : "CRITICAL",
-      "category" : "Missing Missing Endpoint Tests",
-      "description" : "OpenAPI defines GET /orders/{orderId} (getOrderById) but implementation is missing entirely. No unit tests exist.",
-      "suggestion" : "@Test void shouldReturnOrderDetailsWhenOrderExists() { var result = orderController.getOrderById(\"ORD-123\"); assertEquals(\"ORD-123\", result.get(\"orderId\")); assertEquals(200, result.get(\"statusCode\")); }"
+      "category" : "Missing Endpoint Implementation",
+      "description" : "deleteOrder should return 404 when order not found",
+      "suggestion" : "@Test void shouldReturnNotFoundWhenDeletingNonExistentOrder() { /* verify 404 error */ }"
     }, {
       "severity" : "CRITICAL",
-      "category" : "Missing Missing Endpoint Tests",
-      "description" : "OpenAPI defines DELETE /orders/{orderId} (deleteOrder/cancelOrder) but implementation is missing. No tests exist.",
-      "suggestion" : "@Test void shouldCancelOrderWhenOrderExists() { var result = orderController.deleteOrder(\"ORD-123\"); assertEquals(204, result.get(\"statusCode\")); }"
+      "category" : "Missing Endpoint Implementation",
+      "description" : "deleteOrder should return 409 when order already shipped",
+      "suggestion" : "@Test void shouldReturnConflictWhenCancellingShippedOrder() { /* verify 409 error */ }"
     }, {
       "severity" : "CRITICAL",
-      "category" : "Missing HTTP 404 Error Tests",
-      "description" : "No test for HTTP 404 when getOrderById is called with non-existent orderId.",
-      "suggestion" : "@Test void shouldReturn404WhenOrderNotFound() { var result = orderController.getOrderById(\"NON-EXISTENT\"); assertEquals(404, result.get(\"statusCode\")); assertEquals(\"Order not found\", result.get(\"message\")); }"
+      "category" : "Missing Pagination Tests",
+      "description" : "getAllOrders lacks pagination implementation - no tests for page/size parameters",
+      "suggestion" : "@Test void shouldReturnPaginatedOrdersWithDefaultPageSize() { /* verify pagination with page=0, size=20 */ }"
     }, {
       "severity" : "CRITICAL",
-      "category" : "Missing HTTP 404 Error Tests",
-      "description" : "No test for HTTP 404 when deleteOrder is called with non-existent orderId.",
-      "suggestion" : "@Test void shouldReturn404WhenDeletingNonExistentOrder() { var result = orderController.deleteOrder(\"NON-EXISTENT\"); assertEquals(404, result.get(\"statusCode\")); }"
+      "category" : "Missing Pagination Tests",
+      "description" : "No test verifies custom page and size parameters",
+      "suggestion" : "@Test void shouldReturnPaginatedOrdersWithCustomPageAndSize() { /* verify page=2, size=10 */ }"
     }, {
       "severity" : "CRITICAL",
-      "category" : "Missing HTTP 409 Error Tests",
-      "description" : "No test for HTTP 409 Conflict when attempting to cancel an order that is already shipped or delivered.",
-      "suggestion" : "@Test void shouldReturn409WhenCancellingShippedOrder() { mockOrderStatus(\"ORD-123\", \"SHIPPED\"); var result = orderController.deleteOrder(\"ORD-123\"); assertEquals(409, result.get(\"statusCode\")); assertEquals(\"Order cannot be cancelled - already shipped\", result.get(\"message\")); }"
+      "category" : "Missing Pagination Tests",
+      "description" : "No test verifies totalPages and totalElements in list response",
+      "suggestion" : "@Test void shouldReturnCorrectPaginationMetadata() { /* verify totalElements and totalPages */ }"
     }, {
-      "severity" : "WARNING",
+      "severity" : "CRITICAL",
       "category" : "Missing Boundary Condition Tests",
-      "description" : "No test for very large order quantities or very large total amounts that could cause numeric overflow.",
-      "suggestion" : "@Test void shouldHandleVeryLargeTotalAmount() { mockProductPrice(1_000_000.99, 1_000_000.99); var result = orderController.createOrder(\"user123\", List.of(\"prod1\", \"prod2\"), \"CREDIT_CARD\"); assertTrue(result.get(\"total\") instanceof Double); }"
+      "description" : "No test for very large order (extreme total amount)",
+      "suggestion" : "@Test void shouldHandleVeryLargeOrderTotal() { /* verify calculation with 999999.99 */ }"
     }, {
-      "severity" : "WARNING",
+      "severity" : "CRITICAL",
       "category" : "Missing Boundary Condition Tests",
-      "description" : "No test for zero-price products or orders with $0 total.",
-      "suggestion" : "@Test void shouldHandleZeroPriceProduct() { mockProductPrice(0.0, 0.0); var result = orderController.createOrder(\"user123\", List.of(\"free-product\"), \"CREDIT_CARD\"); assertEquals(0.0, result.get(\"total\")); }"
+      "description" : "No test for order with many products (large productIds list)",
+      "suggestion" : "@Test void shouldHandleOrderWithManyProducts() { /* verify order with 1000+ products */ }"
     }, {
-      "severity" : "WARNING",
-      "category" : "Missing Pagination Tests",
-      "description" : "getAllOrders in OpenAPI specifies pagination (page, size parameters) but controller implementation has no pagination support and no tests.",
-      "suggestion" : "@Test void shouldReturnPaginatedOrdersWithDefaultPageSize() { var result = orderController.getAllOrders(\"user123\", 0, 20); assertEquals(20, ((List) result.get(\"orders\")).size()); assertEquals(0, result.get(\"currentPage\")); }"
-    }, {
-      "severity" : "WARNING",
-      "category" : "Missing Pagination Tests",
-      "description" : "No test for pagination with custom page size parameter.",
-      "suggestion" : "@Test void shouldReturnPaginatedOrdersWithCustomPageSize() { var result = orderController.getAllOrders(\"user123\", 0, 50); assertEquals(50, ((List) result.get(\"orders\")).size()); }"
-    }, {
-      "severity" : "WARNING",
-      "category" : "Missing Pagination Tests",
-      "description" : "No test for invalid pagination parameters (negative page, zero size, etc).",
-      "suggestion" : "@Test void shouldReturnBadRequestForInvalidPageNumber() { var result = orderController.getAllOrders(\"user123\", -1, 20); assertEquals(400, result.get(\"statusCode\")); }"
-    }, {
-      "severity" : "WARNING",
+      "severity" : "CRITICAL",
       "category" : "Missing Concurrent Access Tests",
-      "description" : "No test for race conditions when multiple users create orders simultaneously.",
-      "suggestion" : "@Test void shouldHandleConcurrentOrderCreation() throws InterruptedException { ExecutorService executor = Executors.newFixedThreadPool(5); for(int i=0; i<5; i++) { executor.submit(() -> orderController.createOrder(\"user123\", List.of(\"prod1\"), \"CREDIT_CARD\")); } executor.awaitTermination(5, TimeUnit.SECONDS); // Verify no duplicate orderIds generated }"
+      "description" : "No tests verify concurrent order creation (race condition for inventory decrement)",
+      "suggestion" : "@Test void shouldHandleConcurrentOrderCreation() { /* verify thread-safe inventory management */ }"
+    }, {
+      "severity" : "CRITICAL",
+      "category" : "Missing HTTP Status Code Tests",
+      "description" : "No explicit test for 201 Created response when order successfully created",
+      "suggestion" : "@Test void shouldReturnCreatedStatusWhenOrderSuccessfullyCreated() { /* verify 201 response */ }"
+    }, {
+      "severity" : "CRITICAL",
+      "category" : "Missing HTTP Status Code Tests",
+      "description" : "No test for 200 OK response when getAllOrders succeeds",
+      "suggestion" : "@Test void shouldReturnOkStatusWhenRetrievingOrders() { /* verify 200 response */ }"
     }, {
       "severity" : "WARNING",
-      "category" : "Missing Integration Test Scenarios",
-      "description" : "No end-to-end test for complete order lifecycle: create -> get -> cancel.",
-      "suggestion" : "@Test void shouldCompleteFullOrderLifecycle() { var createResult = orderController.createOrder(\"user123\", List.of(\"prod1\"), \"CREDIT_CARD\"); String orderId = (String) createResult.get(\"orderId\"); var getResult = orderController.getOrderById(orderId); assertEquals(orderId, getResult.get(\"orderId\")); var cancelResult = orderController.deleteOrder(orderId); assertEquals(204, cancelResult.get(\"statusCode\")); }"
+      "category" : "Missing Business Logic Tests",
+      "description" : "No test verifies invalid paymentMethod enum values (only CREDIT_CARD, PAYPAL, BANK_TRANSFER allowed)",
+      "suggestion" : "@Test void shouldReturnBadRequestForInvalidPaymentMethod() { /* verify 400 for unsupported enum */ }"
     }, {
       "severity" : "WARNING",
-      "category" : "Missing Integration Test Scenarios",
-      "description" : "No test for payment failure scenario - what happens when emailService fails to send confirmation?",
-      "suggestion" : "@Test void shouldStillCreateOrderIfEmailServiceFails() { when(emailService.sendOrderConfirmation(any(), any(), anyDouble())).thenThrow(new RuntimeException(\"Email service down\")); var result = orderController.createOrder(\"user123\", List.of(\"prod1\"), \"CREDIT_CARD\"); assertEquals(\"ORD-123\", result.get(\"orderId\")); // Order should still be created }"
+      "category" : "Missing Integration Tests",
+      "description" : "No test verifies email is sent after successful order creation",
+      "suggestion" : "@Test void shouldSendOrderConfirmationEmailAfterCreation() { /* verify EmailService.sendOrderConfirmation called */ }"
     }, {
       "severity" : "WARNING",
-      "category" : "Missing Integration Test Scenarios",
-      "description" : "No test for transaction rollback - if userService.updateOrderHistory fails, does orderService.createOrder get rolled back?",
-      "suggestion" : "@Test void shouldRollbackOrderIfUserHistoryUpdateFails() { when(userService.updateOrderHistory(any(), any())).thenThrow(new RuntimeException(\"Database error\")); assertThrows(Exception.class, () -> orderController.createOrder(\"user123\", List.of(\"prod1\"), \"CREDIT_CARD\")); // Verify order was not created in orderService }"
+      "category" : "Missing Integration Tests",
+      "description" : "No test verifies user order history is updated",
+      "suggestion" : "@Test void shouldUpdateUserOrderHistoryAfterOrderCreation() { /* verify UserService.updateOrderHistory called */ }"
+    }, {
+      "severity" : "WARNING",
+      "category" : "Missing Transaction Tests",
+      "description" : "No test verifies rollback behavior if email sending fails after order creation",
+      "suggestion" : "@Test void shouldRollbackOrderIfEmailSendingFails() { /* verify transactional integrity */ }"
+    }, {
+      "severity" : "WARNING",
+      "category" : "Missing Input Validation Tests",
+      "description" : "No test verifies userId format validation (empty string userId)",
+      "suggestion" : "@Test void shouldReturnBadRequestWhenUserIdIsEmpty() { /* verify 400 error */ }"
+    }, {
+      "severity" : "WARNING",
+      "category" : "Missing Input Validation Tests",
+      "description" : "No test verifies orderId format validation in getOrderById",
+      "suggestion" : "@Test void shouldReturnBadRequestWhenOrderIdIsEmpty() { /* verify 400 error */ }"
     }, {
       "severity" : "INFO",
-      "category" : "Missing Type Safety Tests",
-      "description" : "Controller returns raw Map<String, Object> which can contain type mismatches. No test validates returned types.",
-      "suggestion" : "@Test void shouldReturnTypedOrderResponseDTO() { var result = orderController.createOrder(\"user123\", List.of(\"prod1\"), \"CREDIT_CARD\"); assertInstanceOf(String.class, result.get(\"orderId\")); assertInstanceOf(Double.class, result.get(\"total\")); assertInstanceOf(String.class, result.get(\"status\")); }"
+      "category" : "Missing Response Schema Validation Tests",
+      "description" : "No test verifies OrderResponse includes all required fields (orderId, total, status, createdAt)",
+      "suggestion" : "@Test void shouldReturnCompleteOrderResponseSchema() { /* verify all fields present */ }"
     }, {
       "severity" : "INFO",
-      "category" : "Missing Idempotency Tests",
-      "description" : "No test for idempotency - creating the same order twice should not generate duplicate orders.",
-      "suggestion" : "@Test void shouldBeIdempotentWhenCreatingSameOrderTwice() { var request = new CreateOrderRequest(\"user123\", List.of(\"prod1\"), \"CREDIT_CARD\"); var result1 = orderController.createOrder(\"user123\", List.of(\"prod1\"), \"CREDIT_CARD\"); var result2 = orderController.createOrder(\"user123\", List.of(\"prod1\"), \"CREDIT_CARD\"); assertEquals(result1.get(\"orderId\"), result2.get(\"orderId\")); }"
-    }, {
-      "severity" : "INFO",
-      "category" : "Missing Whitespace/Special Character Tests",
-      "description" : "No test for userId or productIds with special characters, spaces, or SQL injection attempts.",
-      "suggestion" : "@Test void shouldHandleUserIdWithSpecialCharacters() { var result = orderController.createOrder(\"user@123'; DROP TABLE--\", List.of(\"prod1\"), \"CREDIT_CARD\"); assertNotNull(result.get(\"orderId\")); }"
+      "category" : "Missing Response Schema Validation Tests",
+      "description" : "No test verifies OrderListResponse includes pagination metadata (totalElements, totalPages)",
+      "suggestion" : "@Test void shouldReturnCompleteOrderListSchema() { /* verify orders, totalElements, totalPages */ }"
     } ]
   } ]
 }

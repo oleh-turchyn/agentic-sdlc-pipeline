@@ -1,0 +1,65 @@
+# Gradle
+.gradle/
+build/
+gradle-app.setting
+!gradle-wrapper.jar
+.gradletasknamecache
+gradle.properties.local
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+*.code-workspace
+.eclipse/
+.settings/
+.classpath
+.project
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+target/
+out/
+*.log
+
+# Maven
+pom.xml.tag
+pom.xml.releaseBackup
+release.properties
+
+# Environment variables
+.env
+.env.local
+.env*.local
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+desktop.ini
+
+# Node (if applicable)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Application specific
+output/
+*.tmp
+*.bak
