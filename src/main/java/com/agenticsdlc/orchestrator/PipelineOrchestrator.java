@@ -13,6 +13,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class PipelineOrchestrator {
 
@@ -32,17 +35,29 @@ public class PipelineOrchestrator {
         String javaCode = Files.readString(Path.of(javaFilePath));
         String openApiSpec = Files.readString(Path.of(openApiFilePath));
 
-        // Run agents sequentially — each agent gets both inputs
-        // In a more advanced version, agents could be run in parallel or
-        // pass results to each other (true multi-agent orchestration)
-        AgentReport.AgentResult codeReview = new CodeReviewAgent().analyze(javaCode, openApiSpec);
-        AgentReport.AgentResult apiCompliance = new OpenApiEnforcerAgent().analyze(javaCode, openApiSpec);
-        AgentReport.AgentResult testGaps = new TestGapAnalyzerAgent().analyze(javaCode, openApiSpec);
+        // Run agents in parallel using CompletableFuture
+        ExecutorService executor = Executors.newFixedThreadPool(3);
+
+        CompletableFuture<AgentReport.AgentResult> codeReviewFuture =
+            CompletableFuture.supplyAsync(() -> new CodeReviewAgent().analyze(javaCode, openApiSpec), executor);
+
+        CompletableFuture<AgentReport.AgentResult> apiComplianceFuture =
+            CompletableFuture.supplyAsync(() -> new OpenApiEnforcerAgent().analyze(javaCode, openApiSpec), executor);
+
+        CompletableFuture<AgentReport.AgentResult> testGapsFuture =
+            CompletableFuture.supplyAsync(() -> new TestGapAnalyzerAgent().analyze(javaCode, openApiSpec), executor);
+
+        List<AgentReport.AgentResult> results = List.of(
+            codeReviewFuture.join(),
+            apiComplianceFuture.join(),
+            testGapsFuture.join()
+        );
+        executor.shutdown();
 
         // Aggregate into final report
         AgentReport.PipelineReport report = AgentReport.PipelineReport.from(
             javaFilePath,
-            List.of(codeReview, apiCompliance, testGaps)
+            results
         );
 
         // Print final report
